@@ -9,11 +9,13 @@ namespace IotHubSdkDemo
 {
     class Program
     {   // klucz do device 1
-        private static string deviceConnectionString = "HostName=iot-IoTHubForProject.azure-devices.net;DeviceId=Device1;SharedAccessKey=iZQobC6oMBdrdBJJLJSAjRzUHNLXcDc8PmV0wkN4P0k=";
+        private static string deviceConnectionString = "HostName=iot-projectIoTHub.azure-devices.net;DeviceId=device1;SharedAccessKey=rcQYHsMFEzkLCOfEkjUKa+tKeDdKaLRKVioWmrpHY/w=";
 
         private static DeviceClient deviceClient = null;
-
-        private const int TEMPERATURE_THRESHOLD = 30;
+        public static int nrOfMessages = 5;
+        public static int delay = 5000;
+        public static int irigationStatusDefault = 0;
+        
 
         static async Task Main(string[] args)
         {
@@ -22,7 +24,7 @@ namespace IotHubSdkDemo
                 deviceClient = DeviceClient.CreateFromConnectionString(deviceConnectionString, TransportType.Mqtt);
                 await deviceClient.OpenAsync();
 
-                await deviceClient.SetMethodHandlerAsync("SendMessages", SendMessagesHandler, null);
+                await deviceClient.SetMethodHandlerAsync("SendMessages", ChangeingStatusOfIrigation, null);
                 await deviceClient.SetMethodDefaultHandlerAsync(DefaultServiceHandler, null);
                 ReceiveCommands();
 
@@ -32,7 +34,7 @@ namespace IotHubSdkDemo
                 Console.WriteLine("Connection Open, press enter to send messages...");
                 Console.ReadLine();
 
-                await SendMessages(5, 2000);
+                await SendMessages(nrOfMessages, delay );
             }
             catch (AggregateException ex)
             {
@@ -54,41 +56,79 @@ namespace IotHubSdkDemo
             await deviceClient.CloseAsync();
         }
 
+        private static async Task SendMessages(int nrOfMessages, int delay) // dzieje sie gdy wowłam metodę send messages bez zmiany statusu polewaczki
+        {
+            await SendMessages(nrOfMessages, delay, irigationStatusDefault);
+        }
 
-        private static async Task SendMessages(int nrOfMessages, int delay)
+        private static async Task SendMessages(int irigationStatus) // dzieje sie gdy wywołam zmiane statusu polewaczki
+        {
+            await SendMessages(nrOfMessages, delay, irigationStatus);
+        }
+
+        private static async Task SendMessages(int nrOfMessages, int delay,  int irigationStatus)
         {
             var rnd = new Random();
+            
 
             Console.WriteLine("Device sending {0} messages to IoTHub...\n", nrOfMessages);
+            var waterPreasure = 1.0;
+            if (irigationStatus == 0)//irigation off
+            {
+                waterPreasure = 0.1;
+            }
+            else if (irigationStatus == 1) // irygation on 
+            {
+               waterPreasure = rnd.Next(0, 11);//unit -> bar   value 11 means error-0, value 0 means error-1
+            }
+            else
+            {
+               waterPreasure = 11; // it's error-0
+            }
 
-            for (int count = 0; count < nrOfMessages; count++)
+                for (int count = 0; count < nrOfMessages; count++)
             {
                 var data = new
                 {
-                    temperature = rnd.Next(20, 35),
-                    humidity = rnd.Next(60, 80),
-                    msgCount = count
-                };
+                        waterPreasure = waterPreasure,//unit -> bar
+                        irigationStatus = irigationStatus, // if device do irrigation chosse 1 otherwise 0
+                        energy = rnd.Next(0, 1), //if device using bulid-in battery pick 1 if not pick 0
+                        msgCount = count
+                    };
 
                 var dataString = JsonConvert.SerializeObject(data);
 
+
                 Message eventMessage = new Message(Encoding.UTF8.GetBytes(dataString));
-                eventMessage.Properties.Add("temperatureAlert", (data.temperature > TEMPERATURE_THRESHOLD) ? "true" : "false");
+                eventMessage.Properties.Add("ERROR-0", (data.waterPreasure > 10) ? "true =unidentified error" : "false"); //unidentified error - do poprawy
+                eventMessage.Properties.Add("ERROR-1", (data.waterPreasure == 0) ? "lack of water" : "we have water"); // lack of water
+                eventMessage.Properties.Add("ERROR-2", (data.energy == 1) ? "lack of energy, we useing battery" : "we don't use battery"); // lack of energy, we useing battery
                 Console.WriteLine($"\t{DateTime.Now.ToLocalTime()}> Sending message: {count}, Data: [{dataString}]");
 
                 await deviceClient.SendEventAsync(eventMessage).ConfigureAwait(false);
 
                 if (count < nrOfMessages - 1)
-                    await Task.Delay(delay);
+                    await Task.Delay(delay); //5 seconds
             }
             Console.WriteLine();
+            irigationStatusDefault = irigationStatus;
         }
 
-        private static async Task<MethodResponse> SendMessagesHandler(MethodRequest methodRequest, object userContext)
-        {
-            var payload = JsonConvert.DeserializeAnonymousType(methodRequest.DataAsJson, new { nrOfMessages = default(int), delay = default(int) });
+        //private static async Task<MethodResponse> SendMessagesHandler(MethodRequest methodRequest, object userContext)
+        //{
+        //    var payload = JsonConvert.DeserializeAnonymousType(methodRequest.DataAsJson, new { nrOfMessages = default(int), delay = default(int) });
 
-            await SendMessages(payload.nrOfMessages, payload.delay);
+        //    await SendMessages(payload.nrOfMessages, payload.delay);
+
+        //    return new MethodResponse(0);
+        //}
+        // metoda do włączania i wyłączania irygacji
+        // {  "irigationStatus" : 0 } direct metoda działa
+        private static async Task<MethodResponse> ChangeingStatusOfIrigation (MethodRequest methodRequest, object userContext)
+        {
+            var payload = JsonConvert.DeserializeAnonymousType(methodRequest.DataAsJson, new {irigationStatus = default(int) });
+
+            await SendMessages(payload.irigationStatus);
 
             return new MethodResponse(0);
         }
