@@ -15,8 +15,7 @@ namespace IotHubSdkDemo
         public static int nrOfMessages = 5;
         public static int delay = 5000;
         public static int irigationStatusDefault = 0;
-        
-
+        public static bool AlertStatus = false;
         static async Task Main(string[] args)
         {
             try
@@ -26,6 +25,7 @@ namespace IotHubSdkDemo
 
                 await deviceClient.SetMethodHandlerAsync("SendMessages", ChangeingStatusOfIrigation, null);
                 await deviceClient.SetMethodDefaultHandlerAsync(DefaultServiceHandler, null);
+                await deviceClient.SetMethodDefaultHandlerAsync(ResetLastAlert, null);
                 ReceiveCommands();
 
                 await DeviceTwinDemo();
@@ -79,7 +79,7 @@ namespace IotHubSdkDemo
             }
             else if (irigationStatus == 1) // irygation on 
             {
-               waterPreasure = rnd.Next(0, 11);//unit -> bar   value 11 means error-0, value 0 means error-1
+                waterPreasure = rnd.Next(0, 11);//unit -> bar   value 11 means error-0, value 0 means error-1
             }
             else
             {
@@ -88,12 +88,18 @@ namespace IotHubSdkDemo
 
                 for (int count = 0; count < nrOfMessages; count++)
             {
+                var energy = rnd.Next(0, 1); //if device using bulid-in battery pick 1 if not pick 0
+                if ( waterPreasure > 10 || waterPreasure == 0 || energy == 0)
+                {
+                    AlertStatus = true;
+                }
                 var data = new
                 {
                         waterPreasure = waterPreasure,//unit -> bar
                         irigationStatus = irigationStatus, // if device do irrigation chosse 1 otherwise 0
-                        energy = rnd.Next(0, 1), //if device using bulid-in battery pick 1 if not pick 0
-                        msgCount = count
+                        energy,
+                        msgCount = count,
+                        AlertStatus
                     };
 
                 var dataString = JsonConvert.SerializeObject(data);
@@ -102,7 +108,7 @@ namespace IotHubSdkDemo
                 Message eventMessage = new Message(Encoding.UTF8.GetBytes(dataString));
                 eventMessage.Properties.Add("ERROR-0", (data.waterPreasure > 10) ? "true =unidentified error" : "false"); //unidentified error - do poprawy
                 eventMessage.Properties.Add("ERROR-1", (data.waterPreasure == 0) ? "lack of water" : "we have water"); // lack of water
-                eventMessage.Properties.Add("ERROR-2", (data.energy == 1) ? "lack of energy, we useing battery" : "we don't use battery"); // lack of energy, we useing battery
+                eventMessage.Properties.Add("ERROR-2", (data.energy == 0) ? "lack of energy, we are using battery" : "we don't use battery"); // lack of energy, we useing battery
                 Console.WriteLine($"\t{DateTime.Now.ToLocalTime()}> Sending message: {count}, Data: [{dataString}]");
 
                 await deviceClient.SendEventAsync(eventMessage).ConfigureAwait(false);
@@ -129,6 +135,15 @@ namespace IotHubSdkDemo
             var payload = JsonConvert.DeserializeAnonymousType(methodRequest.DataAsJson, new {irigationStatus = default(int) });
 
             await SendMessages(payload.irigationStatus);
+
+            return new MethodResponse(0);
+        }
+        private static async Task<MethodResponse> ResetLastAlert (MethodRequest methodRequest, object userContext)
+        {
+            Console.WriteLine("Alert reset");
+            AlertStatus = false;
+
+            await Task.Delay(1000);
 
             return new MethodResponse(0);
         }
