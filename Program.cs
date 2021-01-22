@@ -205,6 +205,7 @@ namespace IotHubSdkDemo
             reportedProperties["DateTimeLastDesiredPropertyChangeReceived"] = DateTime.Now;
 
             await deviceClient.UpdateReportedPropertiesAsync(reportedProperties).ConfigureAwait(false);
+            //
         }
     }
 }
