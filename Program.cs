@@ -16,6 +16,8 @@ namespace IotHubSdkDemo
         public static int delay = 5000;
         public static int irigationStatusDefault = 0;
         public static bool AlertStatus = false;
+        public static int powerOfIrigation = 0;
+
         static async Task Main(string[] args)
         {
             try
@@ -190,7 +192,15 @@ namespace IotHubSdkDemo
             Console.WriteLine(JsonConvert.SerializeObject(twin, Formatting.Indented));
 
             var reportedProperties = new TwinCollection();
-            reportedProperties["DateTimeLastAppLaunch"] = DateTime.Now;
+            reportedProperties["powerOfIrigation"] = powerOfIrigation;
+            reportedProperties["AlertStatus"] = AlertStatus;
+
+            var cos = twin.Properties.Desired.ToJson(Formatting.Indented);
+            dynamic data = JObject.Parse(cos);
+            Console.WriteLine("irigation desired " + data.powerOfIrigation.ToObject(typeof(int)));
+            powerOfIrigation = data.powerOfIrigation.ToObject(typeof(int));
+            Console.WriteLine("alertStatus desired " + data.AlertStatus.ToObject(typeof(bool)));
+            AlertStatus = data.AlertStatus.ToObject(typeof(bool));
 
             await deviceClient.UpdateReportedPropertiesAsync(reportedProperties);
         }
