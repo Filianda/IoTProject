@@ -1,6 +1,7 @@
 ﻿using Microsoft.Azure.Devices.Client;
 using Microsoft.Azure.Devices.Shared;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,13 +10,14 @@ namespace IotHubSdkDemo
 {
     class Program
     {   // klucz do device 1
-        private static string deviceConnectionString = "HostName=iot-projectIoTHub.azure-devices.net;DeviceId=device1;SharedAccessKey=rcQYHsMFEzkLCOfEkjUKa+tKeDdKaLRKVioWmrpHY/w=";
+        private static string deviceConnectionString = "HostName=iot-projectIoTHub.azure-devices.net;DeviceId=device2;SharedAccessKey=e31n0VSWgYRoQbklec/PwmjRmejyht54vYVFqUcefxI=";
 
         private static DeviceClient deviceClient = null;
         public static int nrOfMessages = 5;
         public static int delay = 5000;
         public static int irigationStatusDefault = 0;
-        public static bool AlertStatus = false;
+        public static bool AlertStatus = false; 
+        
         static async Task Main(string[] args)
         {
             try
@@ -34,7 +36,7 @@ namespace IotHubSdkDemo
                 Console.WriteLine("Connection Open, press enter to send messages...");
                 Console.ReadLine();
 
-                await SendMessages(nrOfMessages, delay );
+                await SendMessages(nrOfMessages, delay);
             }
             catch (AggregateException ex)
             {
@@ -66,10 +68,10 @@ namespace IotHubSdkDemo
             await SendMessages(nrOfMessages, delay, irigationStatus);
         }
 
-        private static async Task SendMessages(int nrOfMessages, int delay,  int irigationStatus)
+        private static async Task SendMessages(int nrOfMessages, int delay, int irigationStatus)
         {
             var rnd = new Random();
-            
+
 
             Console.WriteLine("Device sending {0} messages to IoTHub...\n", nrOfMessages);
             var waterPreasure = 1.0;
@@ -83,24 +85,24 @@ namespace IotHubSdkDemo
             }
             else
             {
-               waterPreasure = 11; // it's error-0
+                waterPreasure = 11; // it's error-0
             }
 
-                for (int count = 0; count < nrOfMessages; count++)
+            for (int count = 0; count < nrOfMessages; count++)
             {
                 var energy = rnd.Next(0, 1); //if device using bulid-in battery pick 1 if not pick 0
-                if ( waterPreasure > 10 || waterPreasure == 0 || energy == 0)
+                if (waterPreasure > 10 || waterPreasure == 0 || energy == 0)
                 {
                     AlertStatus = true;
                 }
                 var data = new
                 {
-                        waterPreasure = waterPreasure,//unit -> bar
-                        irigationStatus = irigationStatus, // if device do irrigation chosse 1 otherwise 0
-                        energy,
-                        msgCount = count,
-                        AlertStatus
-                    };
+                    waterPreasure = waterPreasure,//unit -> bar
+                    irigationStatus = irigationStatus, // if device do irrigation chosse 1 otherwise 0
+                    energy,
+                    msgCount = count,
+                    AlertStatus
+                };
 
                 var dataString = JsonConvert.SerializeObject(data);
 
@@ -130,15 +132,15 @@ namespace IotHubSdkDemo
         //}
         // metoda do włączania i wyłączania irygacji
         // {  "irigationStatus" : 0 } direct metoda działa
-        private static async Task<MethodResponse> ChangeingStatusOfIrigation (MethodRequest methodRequest, object userContext)
+        private static async Task<MethodResponse> ChangeingStatusOfIrigation(MethodRequest methodRequest, object userContext)
         {
-            var payload = JsonConvert.DeserializeAnonymousType(methodRequest.DataAsJson, new {irigationStatus = default(int) });
+            var payload = JsonConvert.DeserializeAnonymousType(methodRequest.DataAsJson, new { irigationStatus = default(int) });
 
             await SendMessages(payload.irigationStatus);
 
             return new MethodResponse(0);
         }
-        private static async Task<MethodResponse> ResetLastAlert (MethodRequest methodRequest, object userContext)
+        private static async Task<MethodResponse> ResetLastAlert(MethodRequest methodRequest, object userContext)
         {
             Console.WriteLine("Alert reset");
             AlertStatus = false;
@@ -191,9 +193,20 @@ namespace IotHubSdkDemo
 
             var reportedProperties = new TwinCollection();
             reportedProperties["DateTimeLastAppLaunch"] = DateTime.Now;
+            reportedProperties["current_irrigation_power"] = irigationStatusDefault; //tego nie jestem pewna
+            reportedProperties["alert_status"] = AlertStatus;
+
+            var variable = twin.Properties.Desired.ToJson(Formatting.Indented);
+            dynamic data = JObject.Parse(variable);
+            Console.WriteLine(data.current_irrigation_power.ToObject(typeof(int)));
+            irigationStatusDefault = data.current_irrigation_power.ToObject(typeof(int));
+            Console.WriteLine(data.alert_status.ToObject(typeof(bool)));
+            AlertStatus = data.alert_status.ToObject(typeof(bool));
 
             await deviceClient.UpdateReportedPropertiesAsync(reportedProperties);
         }
+
+
 
         private static async Task OnDesiredPropertyChanged(TwinCollection desiredProperties, object userContext)
         {
@@ -203,6 +216,8 @@ namespace IotHubSdkDemo
             Console.WriteLine("Sending current time as reported property");
             TwinCollection reportedProperties = new TwinCollection();
             reportedProperties["DateTimeLastDesiredPropertyChangeReceived"] = DateTime.Now;
+            reportedProperties["current_irrigation_power"] = irigationStatusDefault;
+            reportedProperties["alert_status"] = AlertStatus;
 
             await deviceClient.UpdateReportedPropertiesAsync(reportedProperties).ConfigureAwait(false);
             //
