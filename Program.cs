@@ -220,7 +220,6 @@ namespace IotHubSdkDemo
             reportedProperties["alert_status"] = AlertStatus;
 
             await deviceClient.UpdateReportedPropertiesAsync(reportedProperties).ConfigureAwait(false);
-            //
         }
     }
 }
