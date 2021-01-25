@@ -15,15 +15,18 @@ namespace IotHubSdkDemo
         private static float MINIMUM_WATER_PREASURE_LEVEL = 1.0f;
 
         private static DeviceClient deviceClient = null;
-        public static int nrOfMessages = 100;
+        public static int nrOfMessages = 10000;
         public static int delay = 1000; // 1 seconds
         public static bool alertStatus = false;
+        public static bool functionStatus = false;
 
         public static float desiredIrigation = 0; // czego chce rolnik
         public static float currentIrigation = 0; // co jest teraz
         public static float waterPreasure = 100;
         public static bool powerOn = true;
-        
+
+
+       
         static async Task Main(string[] args)
         {
             
@@ -34,6 +37,7 @@ namespace IotHubSdkDemo
 
                 await deviceClient.SetMethodHandlerAsync("ChangeStatusOfIrigation", ChangeStatusOfIrigation, null);
                 await deviceClient.SetMethodHandlerAsync("ResetLastAlert", ResetLastAlert, null);
+               // await deviceClient.SetMethodHandlerAsync("ChangeStatusOfIrigationAlert", ChangeStatusOfIrigationAlert, null);
                 await deviceClient.SetMethodDefaultHandlerAsync(DefaultServiceHandler, null);
                 ReceiveCommands();
 
@@ -120,6 +124,7 @@ namespace IotHubSdkDemo
                 if (!powerOn || waterPreasure == 0)
                 {
                     alertStatus = true;
+                    functionStatus = true;
                 }
 
                 var data = new
@@ -128,7 +133,8 @@ namespace IotHubSdkDemo
                     currentIrigation = currentIrigation,
                     energy = powerOn,
                     msgCount = count,
-                    alertStatus = alertStatus
+                    alertStatus = alertStatus,
+                    functionStatus = functionStatus
                 };
 
                 var dataString = JsonConvert.SerializeObject(data);
@@ -160,12 +166,20 @@ namespace IotHubSdkDemo
         private static async Task<MethodResponse> ChangeStatusOfIrigation(MethodRequest methodRequest, object userContext)
         {
             var payload = JsonConvert.DeserializeAnonymousType(methodRequest.DataAsJson, new { irigationStatus = default(int) });
-
-            desiredIrigation = payload.irigationStatus;
+            if (payload == null) {
+                desiredIrigation = 0;
+                functionStatus = false;
+                Console.WriteLine("Irigation Stop");
+            }
+            else
+            {
+                desiredIrigation = payload.irigationStatus;
+            }
 
             return new MethodResponse(0);
         }
-        private static async Task<MethodResponse> ResetLastAlert(MethodRequest methodRequest, object userContext)
+
+         private static async Task<MethodResponse> ResetLastAlert(MethodRequest methodRequest, object userContext)
         {
             Console.WriteLine("Alert reset");
             alertStatus = false;
